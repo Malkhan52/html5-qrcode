@@ -164,6 +164,7 @@ class RenderedCameraImpl implements RenderedCamera {
         videoElement.style.display = "block";
         videoElement.muted = true;
         videoElement.setAttribute("muted", "true");
+        videoElement.id = 'qr-reader-video';
         (<any>videoElement).playsInline = true;
         return videoElement;
     }
