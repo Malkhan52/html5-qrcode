@@ -285,6 +285,10 @@ export class Html5Qrcode {
     private qrRegion: QrcodeRegionBounds | null = null;
     private context: CanvasRenderingContext2D | null = null;
     private lastScanImageFile: string | null = null;
+
+    private viewfinderWidth: number = Constants.DEFAULT_WIDTH;
+    private viewfinderHeight: number = Constants.DEFAULT_WIDTH;
+    private qrCodeCameraScanConfig: any;
     //#endregion
 
     private stateManagerProxy: StateManagerProxy;
@@ -382,6 +386,7 @@ export class Html5Qrcode {
 
         const internalConfig = InternalHtml5QrcodeConfig.create(
             configuration, this.logger);
+        this.qrCodeCameraScanConfig = configuration;
         this.clearElement();
 
         // Check if videoConstraints is passed and valid
@@ -428,6 +433,8 @@ export class Html5Qrcode {
 
             let renderingCallbacks: RenderingCallbacks = {
                 onRenderSurfaceReady: (viewfinderWidth, viewfinderHeight) => {
+                    $this.viewfinderWidth = viewfinderWidth;
+                    $this.viewfinderHeight = viewfinderHeight;
                     $this.setupUi(
                         viewfinderWidth, viewfinderHeight, internalConfig);
 
@@ -448,6 +455,18 @@ export class Html5Qrcode {
                         .then((renderedCamera) => {
                             $this.renderedCamera = renderedCamera;
                             toScanningStateChangeTransaction.execute();
+                            
+                            // Add a resize event listener to handle window size changes
+                            window.addEventListener('resize', () => {
+                                $this.viewfinderWidth = this.element!.clientWidth;
+                                if (internalConfig.aspectRatio) {
+                                    $this.viewfinderHeight = this.element!.clientWidth / internalConfig.aspectRatio;
+                                } else {
+                                    $this.viewfinderHeight = this.element!.clientHeight;
+                                }
+                                $this.handleOrientationChange($this.viewfinderWidth, $this.viewfinderHeight, $this.qrCodeCameraScanConfig);
+                            });
+
                             resolve(/* Void */ null);
                         })
                         .catch((error) => {
@@ -548,6 +567,10 @@ export class Html5Qrcode {
             throw "Cannot stop, scanner is not running or paused.";
         }
 
+        // remove resize event listener
+        window.removeEventListener('resize', () => {
+            this.handleOrientationChange(this.viewfinderWidth, this.viewfinderHeight, this.qrCodeCameraScanConfig);
+        });
         const toStoppedStateTransaction: StateManagerTransaction
             = this.stateManagerProxy.startTransition(
                 Html5QrcodeScannerState.NOT_STARTED);
@@ -556,17 +579,6 @@ export class Html5Qrcode {
         if (this.foreverScanTimeout) {
             clearTimeout(this.foreverScanTimeout);
         }
-
-        // Removes the shaded region if exists.
-        const removeQrRegion = () => {
-            if (!this.element) {
-                return;
-            }
-            let childElement = document.getElementById(Constants.SHADED_REGION_ELEMENT_ID);
-            if (childElement) {
-                this.element.removeChild(childElement);
-            }
-         };
 
         let $this = this;
         return this.renderedCamera!.close().then(() => {
@@ -577,7 +589,7 @@ export class Html5Qrcode {
                 $this.canvasElement = null;
             }
 
-            removeQrRegion();
+            $this.removeQrRegion();
             if ($this.qrRegion) {
                 $this.qrRegion = null;
             }
@@ -1590,6 +1602,34 @@ export class Html5Qrcode {
 
     private getTimeoutFps(fps: number) {
         return 1000 / fps;
+    }
+
+    // Removes the shaded region if exists.
+    private removeQrRegion() {
+        if (!this.element) {
+            return;
+        }
+        let childElement = document.getElementById(Constants.SHADED_REGION_ELEMENT_ID);
+        if (childElement) {
+            this.element.removeChild(childElement);
+        }
+     };
+    private handleOrientationChange(viewfinderWidth: number, viewfinderHeight: number, configuration: Html5QrcodeCameraScanConfig) {
+        let $this = this;
+        $this.removeQrRegion();
+            if ($this.qrRegion) {
+                $this.qrRegion = null;
+            }
+        // update video element width
+        const videoElement = document.getElementById('qr-reader-video');
+        if(videoElement) {
+            videoElement.style.width = `${viewfinderWidth}px`;
+        }
+        // now repaint the shaded region
+        const internalConfig = InternalHtml5QrcodeConfig.create(
+            configuration, this.logger);
+        $this.setupUi(
+            viewfinderWidth, viewfinderHeight, internalConfig);
     }
     //#endregion
 }
