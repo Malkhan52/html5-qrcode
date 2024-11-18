@@ -45,6 +45,10 @@ export class Html5QrcodeStrings {
     public static scannerPaused(): string {
         return "Scanner paused";
     }
+
+    public static cameraPermissionNotEnabled(): string {
+        return "Camera permission needs to be enabled to use it";
+    }
 }
 
 /**

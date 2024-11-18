@@ -40,6 +40,7 @@ import {
     RenderingCallbacks
 } from "./camera/core";
 import { CameraRetriever } from "./camera/retriever";
+import { CameraPermissions } from "./camera/permissions";
 import { ExperimentalFeaturesConfig } from "./experimental-features";
 import {
     StateManagerProxy,
@@ -412,55 +413,64 @@ export class Html5Qrcode {
             = this.stateManagerProxy.startTransition(
                 Html5QrcodeScannerState.SCANNING);
         return new Promise((resolve, reject) => {
-            const videoConstraints = areVideoConstraintsEnabled
+            this.hasCameraPermission().then((hasPermission) => {
+                if (!hasPermission) {
+                    toScanningStateChangeTransaction.cancel();
+                    reject(Html5QrcodeStrings.cameraPermissionNotEnabled());
+                }
+                const videoConstraints = areVideoConstraintsEnabled
                     ? internalConfig.videoConstraints
                     : $this.createVideoConstraints(cameraIdOrConfig);
-            if (!videoConstraints) {
-                toScanningStateChangeTransaction.cancel();
-                reject("videoConstraints should be defined");
-                return;
-            }
-
-            let cameraRenderingOptions: CameraRenderingOptions = {};
-            if (!areVideoConstraintsEnabled || internalConfig.aspectRatio) {
-                cameraRenderingOptions.aspectRatio = internalConfig.aspectRatio;
-            }
-
-            let renderingCallbacks: RenderingCallbacks = {
-                onRenderSurfaceReady: (viewfinderWidth, viewfinderHeight) => {
-                    $this.setupUi(
-                        viewfinderWidth, viewfinderHeight, internalConfig);
-
-                    $this.isScanning = true;
-                    $this.foreverScan(
-                        internalConfig,
-                        qrCodeSuccessCallback,
-                        qrCodeErrorCallbackInternal!);
-                }
-            };
-
-
-            // TODO(minhazav): Flatten this flow.
-            CameraFactory.failIfNotSupported().then((factory) => {
-                factory.create(videoConstraints).then((camera) => {
-                    return camera.render(
-                        this.element!, cameraRenderingOptions, renderingCallbacks)
-                        .then((renderedCamera) => {
-                            $this.renderedCamera = renderedCamera;
-                            toScanningStateChangeTransaction.execute();
-                            resolve(/* Void */ null);
-                        })
-                        .catch((error) => {
-                            toScanningStateChangeTransaction.cancel();
-                            reject(error);
-                        });
-                }).catch((error) => {
+                if (!videoConstraints) {
                     toScanningStateChangeTransaction.cancel();
-                    reject(Html5QrcodeStrings.errorGettingUserMedia(error));
+                    reject("videoConstraints should be defined");
+                    return;
+                }
+
+                let cameraRenderingOptions: CameraRenderingOptions = {};
+                if (!areVideoConstraintsEnabled || internalConfig.aspectRatio) {
+                    cameraRenderingOptions.aspectRatio = internalConfig.aspectRatio;
+                }
+
+                let renderingCallbacks: RenderingCallbacks = {
+                    onRenderSurfaceReady: (viewfinderWidth, viewfinderHeight) => {
+                        $this.setupUi(
+                            viewfinderWidth, viewfinderHeight, internalConfig);
+
+                        $this.isScanning = true;
+                        $this.foreverScan(
+                            internalConfig,
+                            qrCodeSuccessCallback,
+                            qrCodeErrorCallbackInternal!);
+                    }
+                };
+
+
+                // TODO(minhazav): Flatten this flow.
+                CameraFactory.failIfNotSupported().then((factory) => {
+                    factory.create(videoConstraints).then((camera) => {
+                        return camera.render(
+                            this.element!, cameraRenderingOptions, renderingCallbacks)
+                            .then((renderedCamera) => {
+                                $this.renderedCamera = renderedCamera;
+                                toScanningStateChangeTransaction.execute();
+                                resolve(/* Void */ null);
+                            })
+                            .catch((error) => {
+                                toScanningStateChangeTransaction.cancel();
+                                reject(error);
+                            });
+                    }).catch((error) => {
+                        toScanningStateChangeTransaction.cancel();
+                        reject(Html5QrcodeStrings.errorGettingUserMedia(error));
+                    });
+                }).catch((_) => {
+                    toScanningStateChangeTransaction.cancel();
+                    reject(Html5QrcodeStrings.cameraStreamingNotSupported());
                 });
             }).catch((_) => {
                 toScanningStateChangeTransaction.cancel();
-                reject(Html5QrcodeStrings.cameraStreamingNotSupported());
+                reject(Html5QrcodeStrings.cameraPermissionNotEnabled());
             });
         });
     }
@@ -764,6 +774,14 @@ export class Html5Qrcode {
      */
     public static getCameras(): Promise<Array<CameraDevice>> {
         return CameraRetriever.retrieve();
+    }
+    
+    /**
+     * Returns {@code true} if the web page already has access to user camera 
+     * permissions.
+     */
+    public hasCameraPermission(): Promise<boolean> {
+        return CameraPermissions.hasPermissions();
     }
 
     /**
