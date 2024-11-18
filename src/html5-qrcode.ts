@@ -603,6 +603,35 @@ export class Html5Qrcode {
             return Promise.resolve();
         });
     }
+    
+    /**
+     * Restart streaming QR Code video and scanning.
+     *
+     * @returns Promise for safely closing the video stream.
+     */
+    public restart(
+        cameraIdOrConfig: string | MediaTrackConstraints,
+        configuration: Html5QrcodeCameraScanConfig | undefined,
+        qrCodeSuccessCallback: QrcodeSuccessCallback | undefined,
+        qrCodeErrorCallback: QrcodeErrorCallback | undefined,
+    ): Promise<void> {
+        return this.stop()
+        .then(() => {
+            // stopped now start again
+            return Promise.resolve(
+                this.start (
+                    cameraIdOrConfig,
+                    configuration,
+                    qrCodeSuccessCallback,
+                    qrCodeErrorCallback
+                )
+            );
+        })
+        .catch((err: any) => {
+        // Stop failed, handle it.
+        return Promise.reject(err);
+    });;
+    }
     //#endregion
 
     //#region File scan related public APIs
@@ -1614,6 +1643,7 @@ export class Html5Qrcode {
             this.element.removeChild(childElement);
         }
      };
+    
     private handleOrientationChange(viewfinderWidth: number, viewfinderHeight: number, configuration: Html5QrcodeCameraScanConfig) {
         let $this = this;
         $this.removeQrRegion();
